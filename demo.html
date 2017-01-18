@@ -50,6 +50,8 @@
 			uniform sampler2D t_data1;
 			uniform sampler2D b_tex;
 			uniform float intactness;
+			uniform float sdm;
+			uniform float lblend;
 
 			varying vec2 vUV;
 			varying vec3 fN;
@@ -101,7 +103,7 @@
 			void main()
 			{
 				// constant ambient, diffuse and specular and shiny values
-				float KA = 0.2;
+				float KA = 0.5;
 				float KD = 1.0;
 				float KS = 0.15;
 				float SHINY = 20.0;
@@ -112,25 +114,15 @@
 				vec4 baseColor = texture2D(b_tex, vUV);
 
 				// low intactness and tortoises exist
-				// low intactness and tortoises exist
-                //vec4 multiplier = vec4(texColor2.r - 0.7, texColor2.g - 0.7, 1.0, 1.0) * when_lt(texColor2.r, 0.2) * when_gt(1.0 - texColor1.r, intactness);      
-                //baseColor *= multiplier * when_neq(texColor2.r, 0.0);
-                
-				// low intactness and tortoises exist
-				// low intactness and tortoises exist
-                //vec4 intactnessColor = vec4(texColor2.r, texColor2.g, 1.0, 1.0) * when_lt(texColor2.r, 0.2) * when_gt(1.0 - texColor1.r, intactness);      
-                //baseColor *= multiplier * when_neq(texColor2.r, 0.0);
-                
-                //vec4 intactnessColor;
+                vec4 intactnessColor = vec4(texColor1.r, texColor1.g*.5, 0.5, 1.0) * when_gt(1.0 - texColor1.r, intactness) * when_neq(texColor1.r, 0.0);      
                 vec4 tortoiseVisible = vec4(vec3(0.0),1.);
                 float checker = intactness;
-                tortoiseVisible.r = 1.0 - texColor2.r * when_ge(texColor2.r, .9);
-				tortoiseVisible.g = tortoiseVisible.r;
-				//baseColor *= vec4(texColor2.r, vec3(1.0)) * when_le(texColor2.r, 0.8) * when_neq(texColor2.r, 0.0) * when_gt(1.0 - texColor1.r, intactness);
-                //baseColor = mix(baseColor, vec4(0.5), 0.1);
-				//baseColor.r = tortoiseVisible;
-				baseColor *= mix(baseColor, tortoiseVisible, 0.2);
-                //baseColor *= mix(baseColor, intactnessColor, 0.2);
+                tortoiseVisible.b = (1.0 - texColor2.r * when_ge(texColor2.r, .9)) * when_neq(texColor2.w, 0.) * when_neq(sdm, 0.0);
+
+				// blend the layers
+				baseColor *= mix(baseColor, tortoiseVisible, lblend);
+                baseColor *= mix(baseColor, intactnessColor, lblend);
+
 				// compute lighting per vertex
 				vec3 N = normalize(fN);
 			    vec3 E = normalize(fE);
@@ -226,7 +218,9 @@
 					'b_tex': {value: base_texture},
 					'disp': {value: 3.0},
 					'light': {value: dynamicLightPosition},
-					'intactness': {value: 0.3}	// init value
+					'intactness': {value: 0.3},	// init value
+					'lblend': {value: 0.5},
+					'sdm': {value: 1.0}
 				},
 				vertexShader: document.getElementById('vertexShader').textContent,
 				fragmentShader: document.getElementById('fragmentShader').textContent
@@ -328,7 +322,9 @@
 			'Light Position (x)': 1.0,
 			'Light Position (y)': -1.0,
 			'Light Position (z)': 1.0,
-			'Intactness': 0.3
+			'Tortoise SDM': true,
+			'Low Intactness': 0.3,
+			'Layer Blending': 0.5
 		}
 
 	    var advControls = terrainControls.addFolder('Advanced Controls')
@@ -359,9 +355,36 @@
 	    	updateLightPosition()
 	    })
 
+	    advControls.add(guiParams, 'Layer Blending', 0.0, 1.0).onChange(function(value) {
+	    	if (scene.children.length > 0) {
+	    		for (var i = 0; i < scene.children.length; i++) {
+	    			var child = scene.children[i];
+	    			var child_mat = child.material;
+	    			child_mat.uniforms.lblend.value = value;
+	    			child_mat.uniforms.lblend.needsUpdate = true;
+	    		}
+	    	}
+	    })
+
 	    var layerControls = terrainControls.addFolder('Layer Controls')
 	    layerControls.open();
-	    layerControls.add(guiParams, 'Intactness', 0.0, 1.0).onChange(function(value) {
+
+	    layerControls.add(guiParams, 'Tortoise SDM', 1.0).onChange(function(value) {
+	    	if (scene.children.length > 0) {
+	       		for (var i = 0; i < scene.children.length; i++) {
+	    			var child = scene.children[i];
+	    			var child_mat = child.material;
+	    			if (child_mat.uniforms.sdm.value == 1) {
+	    				child_mat.uniforms.sdm.value = 0;
+	    			} else {
+	    				child_mat.uniforms.sdm.value = 1;
+	    			}
+	    			child_mat.uniforms.sdm.needsUpdate = true;
+	    		}
+	    	}
+	    })
+
+	    layerControls.add(guiParams, 'Low Intactness', 0.01, 1.0).onChange(function(value) {
 	    	if (scene.children.length > 0) {
 	    		for (var i = 0; i < scene.children.length; i++) {
 	    			var child = scene.children[i];
