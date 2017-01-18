@@ -9,24 +9,6 @@
 	<body>
 		<div id='scene'></div>
 		<script type="x-shader/x-vertex" id="vertexShader">
-
-			// Vertex Shader
-			/*
-				Vertex shaders consume information per vertex specified in this shader program's attribute arrays.
-
-				Typical vertex shaders contain position, normal (shading), and index data. Ultimately we have to specify a vec4 object with position information by filling the built-in
-				gl_Position value.
-
-				We also can pass information to the fragment shader on a per-vertex basis, such as
-				texture coordinates (or 'uv' coordinates).
-			
-				Uniform variables are applyed across every vertex for the shader program,
-				while attribute variables supply the per-vertex information.
-			*/
-
-			// *** Note: attribute variables are inherited from the THREE WebGLProgram creation process
-			//
-			// Attributes included from THREE.WebGLProgram include:
 			attribute vec3 position;
 			attribute vec2 uv;
 
@@ -35,20 +17,16 @@
 			uniform mat4 modelViewMatrix; // optional
 			uniform mat4 projectionMatrix; // optional
 
-			// declare uniform variables specified in the shader program (i.e. uniform locations)
 			uniform sampler2D t_height;
 			uniform sampler2D t_normal;
+			uniform vec3 light;
+			uniform float disp;	// displacement
 
-			// 
 			varying vec2 vUV;
 			varying vec3 fN;
 			varying vec3 fE;
 			varying vec3 fL;
 
-			// Mapzen & s3.aws elevation tiles are decoded as such below
-			// (red * 256 + green + blue / 256) - 32768
-			// *** NOTE: Web/OpenGL textures/samplers are mapped [0,256] --> [0,1], so scale up by 256
-				// to perform the correct decoding for elevation
 			float decodeHeight(vec4 texture)
 			{
 				return (texture.r * 256.0 * 256.0 + texture.g * 256.0 + texture.b - 32768.0) / 256.0;
@@ -56,49 +34,53 @@
 
 			void main()
 			{
-				// Copy the uv coordinates from the 'uv' attribute to the fragment shader
 				vUV = uv;
-
-				// Sample height texture
-				float h = decodeHeight(texture2D(t_height, uv)) * 3.0;
-
-				// Sample normal texture for hill shading.
+				float h = decodeHeight(texture2D(t_height, uv)) * disp;
 				fN = normalize(texture2D(t_normal, uv).xyz * 256.);
 				fE = -(modelViewMatrix * vec4(position, 1.0)).xyz;
-
-				// Set the light position. Make it a unit vector since direction is what matters.
-				fL = normalize(vec3(1.0,-1.0,1.0));
-				
-				// Set the final position of this vertex in MVP coordinates
+				fL = normalize(light);
 				gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, h, position.z, 1.0);
 			}
 		</script>
 		<script type="x-shader/x-fragment" id="fragmentShader">
-
-			// Fragment Shader
-			/*
-				Fragment shaders determine the final pixel color, where we can determine shading influences
-				from normal vectors, texture data, color attributes inherited from the vertex shader, etc.
-
-				We can call the builtin 'discard' function whenever we find conditions we don't want to show.
-				This can be expensive since we wait until the last possible operation to do so, but in GPU memory, discards are cheap.
-
-				The last action that is done is specifying 'gl_FragColor', a vec4 that specifies the RGBA of the pixel.
-			*/
-
 			precision mediump float;
 			precision mediump int;
 
+			uniform sampler2D t_data0;
 			uniform sampler2D t_data1;
-			uniform sampler2D t_data2;
 			uniform sampler2D b_tex;
-			uniform sampler2D t_height;
+			//uniform sampler2D t_height;
+			uniform float intactness;
+
 			varying vec2 vUV;
 			varying vec3 fN;
 			varying vec3 fE;
 			varying vec3 fL;
-			varying vec3 vViewPosition;
 
+			// use in place of conditionals
+			float when_eq(float x, float y) {
+			  return 1.0 - abs(sign(x - y));
+			}
+
+			float when_neq(float x, float y) {
+			  return abs(sign(x - y));
+			}
+
+			float when_gt(float x, float y) {
+			  return max(sign(x - y), 0.0);
+			}
+
+			float when_lt(float x, float y) {
+			  return max(sign(y - x), 0.0);
+			}
+
+			float when_ge(float x, float y) {
+			  return 1.0 - when_lt(x, y);
+			}
+
+			float when_le(float x, float y) {
+			  return 1.0 - when_gt(x, y);
+			}
 
 			void main()
 			{
@@ -108,19 +90,17 @@
 				float KS = 0.15;
 				float SHINY = 20.0;
 
-
 				// sample the layer data
-				vec4 texColor1 = texture2D(t_data1, vUV);	// intactness = texColor1
-				vec4 texColor2 = texture2D(t_data2, vUV);	// tortoise = texColor2
+				vec4 texColor1 = texture2D(t_data0, vUV);	// intactness = texColor1
+				vec4 texColor2 = texture2D(t_data1, vUV);	// tortoise = texColor2
 				vec4 baseColor = texture2D(b_tex, vUV);
-                if (texColor2.r != 0.0) {
+                //if (texColor2.r != 0.0) {
 					vec4 multiplier = vec4(1.0);
-					if (texColor2.r < 0.1 && 1.0 - texColor1.r > .3) {				// low intactness and tortoises exist
+					if (texColor2.r < 0.1 && 1.0 - texColor1.r > intactness) {				// low intactness and tortoises exist
 	                    multiplier = vec4(texColor2.r - 0.7, texColor2.g - 0.7, 1.0, 1.0);
-	                    baseColor *= multiplier;
-						
+	                    baseColor *= multiplier * when_neq(texColor2.r, 0.0);  
 	                }
-	            }
+	            //}
 
 				// compute lighting per vertex
 				vec3 N = normalize(fN);
@@ -145,6 +125,7 @@
 		</script>
 		<script src="js/three.js"></script>
 		<script src="js/OrbitControls.js"></script>
+		<script src="js/dat.gui.min.js"></script>
 		<script>
 
 		// tile constants
@@ -168,7 +149,7 @@
 		var y_tiles = config['ymax'] - config['ymin'] + 1;
 
 		// check that the number of y tiles for elevation is the same for layers
-
+		// **TODO**
 
 
 		// world sizes
@@ -181,8 +162,6 @@
 
 		var renderer = new THREE.WebGLRenderer();
 		renderer.setSize( window.innerWidth, window.innerHeight );
-		//var container = document.getElementById('scene');
-		//container.appendChild( renderer.domElement );	// append the rendering canvas onto the document or container. can be a child just as easy inside of a div.
 		document.body.appendChild(renderer.domElement);
 
 		var controls = new THREE.OrbitControls(camera, renderer.domElement)
@@ -192,6 +171,47 @@
 
 		var loader = new THREE.TextureLoader()
 
+		// light uniform
+	    var dynamicLightPosition = Array(1.0,-1.0,1.0)
+	    function updateLightPosition() {
+	    	if (scene.children.length > 0) {
+	    		for (var i = 0; i < scene.children.length; i++) {
+		   			var child = scene.children[i]
+	    			var child_mat = child.material
+					child_mat.uniforms.light.value = dynamicLightPosition
+					child_mat.uniforms.light.needsUpdate = true
+	    		}
+	    		render()
+	    	}
+	    }
+
+	    function addOneTile(x_offset, y_offset, base_texture, height_texture, normal_texture, data_textures) {
+			var geometry = new THREE.PlaneBufferGeometry(tile_size, tile_size, tile_size-1, tile_size-1);
+			var material = new THREE.RawShaderMaterial(
+			{
+				uniforms: {
+					't_data0': {value: data_textures[0]},
+					't_data1': {value: data_textures[1]},
+					't_height': {value: height_texture},
+					't_normal': {value: normal_texture},
+					'b_tex': {value: base_texture},
+					'disp': {value: 3.0},
+					'light': {value: dynamicLightPosition},
+					'intactness': {value: 0.3}	// init value
+				},
+				vertexShader: document.getElementById('vertexShader').textContent,
+				fragmentShader: document.getElementById('fragmentShader').textContent
+			})
+
+			geometry.rotateX(-Math.PI / 2)
+			var tile = new THREE.Mesh( geometry, material );
+			
+			tile.translateOnAxis(new THREE.Vector3(1,0,0), x_offset);
+			tile.translateOnAxis(new THREE.Vector3(0,0,1), y_offset);
+			scene.add( tile );
+	    }
+
+	    // create one tile mesh
 		function createOneTile(x_idx,y_idx, x_offset, y_offset) {
 
 			// Elevation and lighting layers
@@ -205,7 +225,8 @@
 			var data_tex1_url = '/intactness/intactness_mercator/' + String(config['z']) + '/' + String(config['xmin'] + x_idx) + '/' + String(config['ymax'] - y_idx) + '.png'
 			// Tortoise
 			var data_tex2_url = '/tortoise2/tortoise-drecp/' + String(config['z']) + '/' + String(config['xmin'] + x_idx) + '/' + String(config['ymax'] - y_idx) + '.png'
-			//var base_tex_url = 'http://a.tile.osm.org/' + String(config['z']) + '/' + String(config['xmin'] + x_idx) + '/' + String(config['eymin'] + y_idx) + '.png'
+
+			// Basemap texture
 			var base_tex_url = 'http://a.basemaps.cartocdn.com/light_all/' + String(config['z']) + '/' + String(config['xmin'] + x_idx) + '/' + String(config['eymin'] + y_idx) + '.png';
 			//loader.load(blank_tex_url, function(b_texture) {
 			loader.load(base_tex_url, function(b_texture) {
@@ -213,27 +234,8 @@
 					loader.load(norm_tex_url, function(t_texture) {
 						loader.load(data_tex1_url, function(d_texture1) {
 							loader.load(data_tex2_url, function(d_texture2) {
-
-								var geometry = new THREE.PlaneBufferGeometry(tile_size, tile_size, tile_size-1, tile_size-1);
-								var material = new THREE.ShaderMaterial(
-								{
-									uniforms: {
-										't_data1': {value: d_texture1},
-										't_data2': {value: d_texture2},
-										't_height': {value: h_texture},
-										't_normal': {value: t_texture},
-										'b_tex': {value: b_texture}
-									},
-									vertexShader: document.getElementById('vertexShader').textContent,
-									fragmentShader: document.getElementById('fragmentShader').textContent
-								})
-
-								geometry.rotateX(-Math.PI / 2)
-								var tile = new THREE.Mesh( geometry, material );
-				
-								tile.translateOnAxis(new THREE.Vector3(1,0,0), x_offset);
-								tile.translateOnAxis(new THREE.Vector3(0,0,1), y_offset);
-								scene.add( tile );
+								var dataTextures = [d_texture1, d_texture2];
+								addOneTile(x_offset, y_offset, b_texture, h_texture, t_texture, dataTextures);
 								num_requests--;
 								if (num_requests == 0) {
 									console.log(new Date().getTime() - start);
@@ -241,27 +243,9 @@
 							},
 							function(xhr) {},
 							function(xhr) {
-
 								console.log("Couldn't load tortoise.");
-								var geometry = new THREE.PlaneBufferGeometry(tile_size, tile_size, tile_size-1, tile_size-1);
-								var material = new THREE.RawShaderMaterial(
-								{
-									uniforms: {
-										't_data1': {value: null},
-										't_data2': {value: null},
-										't_height': {value: h_texture},		// height and normal textures are in scope
-										't_normal': {value: t_texture},
-										'b_tex': {value: b_texture}
-									},
-									vertexShader: document.getElementById('vertexShader').textContent,
-									fragmentShader: document.getElementById('fragmentShader').textContent
-								})
-
-								geometry.rotateX(-Math.PI / 2)
-								var tile = new THREE.Mesh( geometry, material );
-								tile.translateOnAxis(new THREE.Vector3(1,0,0), x_offset);
-								tile.translateOnAxis(new THREE.Vector3(0,0,1), y_offset);
-								scene.add( tile );
+								var dataTextures = [null,null];
+								addOneTile(x_offset, y_offset, b_texture, h_texture, t_texture, dataTextures);
 								num_requests--;
 								if (num_requests == 0) {
 									console.log(new Date().getTime() - start);
@@ -272,25 +256,8 @@
 						function(xhr) {/*progress*/},
 						function(xhr) {
 							console.log("Couldn't load intactness.");
-							var geometry = new THREE.PlaneBufferGeometry(tile_size, tile_size, tile_size-1, tile_size-1);
-							var material = new THREE.RawShaderMaterial(
-							{
-								uniforms: {
-									't_data1': {value: null},
-									't_data2': {value: null},
-									't_height': {value: h_texture},
-									't_normal': {value: t_texture},
-									'b_tex': {value: b_texture}
-								},
-								vertexShader: document.getElementById('vertexShader').textContent,
-								fragmentShader: document.getElementById('fragmentShader').textContent
-							})	// end block comment
-
-							geometry.rotateX(-Math.PI / 2)
-							var tile = new THREE.Mesh( geometry, material );
-							tile.translateOnAxis(new THREE.Vector3(1,0,0), x_offset);
-							tile.translateOnAxis(new THREE.Vector3(0,0,1), y_offset);
-							scene.add( tile );
+							var dataTextures = [null,null];
+							addOneTile(x_offset, y_offset, b_texture, h_texture, t_texture, dataTextures);
 							num_requests--;
 							if (num_requests == 0) {
 								console.log(new Date().getTime() - start);
@@ -325,6 +292,64 @@
 		// move the camera
 		camera.position.y = 800;
 
+		var terrainControls = new dat.GUI()
+
+		var guiParams = {
+			'Vertical Scale': 3.0,
+			'Light Position (x)': 1.0,
+			'Light Position (y)': -1.0,
+			'Light Position (z)': 1.0,
+			'Intactness': 0.3
+		}
+
+	    var advControls = terrainControls.addFolder('Advanced Controls')
+
+	    advControls.add(guiParams, 'Vertical Scale',0.0, 10.0).onChange( function(value){
+
+	    	if (scene.children.length > 0) {
+	    		for (var i = 0; i < scene.children.length; i++) {
+	    			var child = scene.children[i]
+	    			var child_mat = child.material
+					child_mat.uniforms.disp.value = value
+					child_mat.uniforms.disp.needsUpdate = true
+	    		}
+	    		render()
+	    	}
+	    })
+
+	    advControls.add(guiParams, 'Light Position (x)', -1.0, 1.0).onChange(function(value) {
+	    	dynamicLightPosition[0] = value
+	    	updateLightPosition()
+	    })
+	    advControls.add(guiParams, 'Light Position (y)', -1.0, 1.0).onChange(function(value) {
+	    	dynamicLightPosition[1] = value
+	    	updateLightPosition()
+	    })
+	    advControls.add(guiParams, 'Light Position (z)', -1.0, 1.0).onChange(function(value) {
+	    	dynamicLightPosition[2] = value    	
+	    	updateLightPosition()
+	    })
+
+	    var layerControls = terrainControls.addFolder('Layer Controls')
+	    layerControls.open();
+	    layerControls.add(guiParams, 'Intactness', 0.0, 1.0).onChange(function(value) {
+	    	if (scene.children.length > 0) {
+	    		for (var i = 0; i < scene.children.length; i++) {
+	    			var child = scene.children[i];
+	    			var child_mat = child.material;
+	    			child_mat.uniforms.intactness = value;
+	    			child_mat.uniforms.intactness.needsUpdate = true;
+	    		}
+	    	}
+	    })
+
+	    terrainControls.open();
+	    terrainControls.domElement.style.position='absolute';
+	    terrainControls.domElement.style.top = '0%';
+	    terrainControls.domElement.style.right = '0%';
+	    document.body.appendChild(terrainControls.domElement);
+
+
 		// render and go
 		var render = function () {
 			requestAnimationFrame( render );
@@ -335,8 +360,6 @@
 		function resize() {
 			renderer.setSize(window.innerWidth, window.innerHeight);
 			camera.aspect = window.innerWidth / window.innerHeight;
-			//renderer.setSize(container.offsetWidth, container.offsetHeight);	// Projection matrix is calculated based on its container
-			//camera.aspect = container.offsetWidth / container.offsetHeight;	// For simplicity, we can use the whole window
 			camera.updateProjectionMatrix();
 			render();
 		}
