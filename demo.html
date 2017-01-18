@@ -49,7 +49,6 @@
 			uniform sampler2D t_data0;
 			uniform sampler2D t_data1;
 			uniform sampler2D b_tex;
-			//uniform sampler2D t_height;
 			uniform float intactness;
 
 			varying vec2 vUV;
@@ -57,7 +56,7 @@
 			varying vec3 fE;
 			varying vec3 fL;
 
-			// use in place of conditionals
+			// use in place of conditionals for performance
 			float when_eq(float x, float y) {
 			  return 1.0 - abs(sign(x - y));
 			}
@@ -94,13 +93,14 @@
 				vec4 texColor1 = texture2D(t_data0, vUV);	// intactness = texColor1
 				vec4 texColor2 = texture2D(t_data1, vUV);	// tortoise = texColor2
 				vec4 baseColor = texture2D(b_tex, vUV);
-                //if (texColor2.r != 0.0) {
-					vec4 multiplier = vec4(1.0);
-					if (texColor2.r < 0.1 && 1.0 - texColor1.r > intactness) {				// low intactness and tortoises exist
-	                    multiplier = vec4(texColor2.r - 0.7, texColor2.g - 0.7, 1.0, 1.0);
-	                    baseColor *= multiplier * when_neq(texColor2.r, 0.0);  
-	                }
-	            //}
+
+				// low intactness and tortoises exist
+				// low intactness and tortoises exist
+                //vec4 multiplier = vec4(texColor2.r - 0.7, texColor2.g - 0.7, 1.0, 1.0) * when_lt(texColor2.r, 0.2) * when_gt(1.0 - texColor1.r, intactness);      
+                //baseColor *= multiplier * when_neq(texColor2.r, 0.0);
+                
+				baseColor *= vec4(texColor2.r, vec3(1.0)) * when_le(texColor2.r, 0.8) * when_neq(texColor2.r, 0.0) * when_gt(1.0 - texColor1.r, intactness);
+                baseColor = mix(baseColor, vec4(0.5), 0.5);
 
 				// compute lighting per vertex
 				vec3 N = normalize(fN);
@@ -337,7 +337,7 @@
 	    		for (var i = 0; i < scene.children.length; i++) {
 	    			var child = scene.children[i];
 	    			var child_mat = child.material;
-	    			child_mat.uniforms.intactness = value;
+	    			child_mat.uniforms.intactness.value = value;
 	    			child_mat.uniforms.intactness.needsUpdate = true;
 	    		}
 	    	}
