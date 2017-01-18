@@ -81,6 +81,23 @@
 			  return 1.0 - when_gt(x, y);
 			}
 
+			// and/or/xor
+			vec4 and(vec4 a, vec4 b) {
+			  return a * b;
+			}
+
+			vec4 or(vec4 a, vec4 b) {
+			  return min(a + b, 1.0);
+			}
+
+			//vec4 xor(vec4 a, vec4 b) {
+			//  return (a + b) % 2.0;		// modulus not available in < ES 3.0 =(
+			//}
+
+			vec4 not(vec4 a) {
+			  return 1.0 - a;
+			}
+
 			void main()
 			{
 				// constant ambient, diffuse and specular and shiny values
@@ -99,9 +116,21 @@
                 //vec4 multiplier = vec4(texColor2.r - 0.7, texColor2.g - 0.7, 1.0, 1.0) * when_lt(texColor2.r, 0.2) * when_gt(1.0 - texColor1.r, intactness);      
                 //baseColor *= multiplier * when_neq(texColor2.r, 0.0);
                 
-				baseColor *= vec4(texColor2.r, vec3(1.0)) * when_le(texColor2.r, 0.8) * when_neq(texColor2.r, 0.0) * when_gt(1.0 - texColor1.r, intactness);
-                baseColor = mix(baseColor, vec4(0.5), 0.5);
-
+				// low intactness and tortoises exist
+				// low intactness and tortoises exist
+                //vec4 intactnessColor = vec4(texColor2.r, texColor2.g, 1.0, 1.0) * when_lt(texColor2.r, 0.2) * when_gt(1.0 - texColor1.r, intactness);      
+                //baseColor *= multiplier * when_neq(texColor2.r, 0.0);
+                
+                //vec4 intactnessColor;
+                vec4 tortoiseVisible = vec4(vec3(0.0),1.);
+                float checker = intactness;
+                tortoiseVisible.r = 1.0 - texColor2.r * when_ge(texColor2.r, .9);
+				tortoiseVisible.g = tortoiseVisible.r;
+				//baseColor *= vec4(texColor2.r, vec3(1.0)) * when_le(texColor2.r, 0.8) * when_neq(texColor2.r, 0.0) * when_gt(1.0 - texColor1.r, intactness);
+                //baseColor = mix(baseColor, vec4(0.5), 0.1);
+				//baseColor.r = tortoiseVisible;
+				baseColor *= mix(baseColor, tortoiseVisible, 0.2);
+                //baseColor *= mix(baseColor, intactnessColor, 0.2);
 				// compute lighting per vertex
 				vec3 N = normalize(fN);
 			    vec3 E = normalize(fE);
