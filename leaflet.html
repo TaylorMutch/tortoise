@@ -6,8 +6,19 @@
             <title>Tortoise-Intactness Intersections</title>
 
             <!-- Leaflet -->
-            <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.5/leaflet.css" />
-            <script src="http://cdn.leafletjs.com/leaflet-0.7.5/leaflet.js"></script>
+            <!--link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.5/leaflet.css" />
+            <script src="http://cdn.leafletjs.com/leaflet-0.7.5/leaflet.js"></script-->
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.2/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.0.2/dist/leaflet.js"></script>
+
+<!-- Leaflet.draw -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/0.4.7/leaflet.draw.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/0.4.7/leaflet.draw.css"/>
+
+<!-- Leaflet.esri -->
+<script src="https://unpkg.com/esri-leaflet@2.0.6"></script>
 
             <style>
                 body { margin:0; padding:0; }
@@ -55,8 +66,8 @@
         // Overlay layers (TMS)
         var tortoise = L.tileLayer('./tortoise2/tortoise-drecp/{z}/{x}/{y}.png', {tms: true, opacity: 0.7, attribution: ""});
         var intactness = L.tileLayer('./intactness/intactness_mercator/{z}/{x}/{y}.png', {tms: true, opacity: 0.7, attribution: ""});
-        var terrarium = L.tileLayer('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', {tms: true, opacity: 0.7, attribution: ""});
-        var normals = L.tileLayer('https://s3.amazonaws.com/elevation-tiles-prod/normal/{z}/{x}/{y}.png', {tms: true, opacity: 0.7, attribution: ""});
+        var terrarium = L.tileLayer('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', {opacity: 0.7, attribution: ""});
+        var normals = L.tileLayer('https://s3.amazonaws.com/elevation-tiles-prod/normal/{z}/{x}/{y}.png', {opacity: 0.7, attribution: ""});
 
         // Map
         var map = L.map('map', {
@@ -101,6 +112,71 @@
 
         // Fit to overlay bounds (SW and NE points with (lat, lon))
         map.fitBounds([[32.57113856746081, -113.88025297942258], [37.528542869643765, -118.8378753694214]]);
+
+// https://gist.github.com/mourner/8825883
+// Returns the tiles we need for input into webgl
+function getTileUrls(bounds, tileLayer, zoom) {
+    var min = map.project(bounds.getNorthWest(), zoom).divideBy(256).floor(),
+        max = map.project(bounds.getSouthEast(), zoom).divideBy(256).floor(),
+        urls = [];
+
+    for (var i = min.x; i <= max.x; i++) {
+        for (var j = min.y; j <= max.y; j++) {
+            var coords = new L.Point(i, j);
+            coords.z = zoom;
+            urls.push(tileLayer.getTileUrl(coords));
+        }
+    }
+    return urls;
+}
+
+
+// Borrowed from landscape sim, courtesy Mike Gough. Draws a layer for selecting a bbox.
+
+var drawnItems = L.featureGroup().addTo(map);
+
+var drawButtons = new L.Control.Draw({
+    draw: {
+        polyline: false,
+        circle: false,
+        marker: false,
+        polygon: false,
+        rectangle: {
+            shapeOptions: {
+                color:"#00FFFF",
+                opacity:.6
+            }
+        },
+        showArea:true,
+    },
+});
+
+map.addControl(drawButtons);
+
+var drawn_layer;
+
+map.on('draw:created', function (e) {
+
+    if (typeof drawn_layer != "undefined" && map.hasLayer(drawn_layer)){
+        map.removeLayer(drawn_layer)
+    }
+
+    drawn_layer = e.layer;
+
+    var type = e.layerType;
+    drawnItems.addLayer(e.layer);
+
+    var textureURLS = getTileUrls(e.layer._bounds, intactness, map.getZoom());
+    var elevationURLS = getTileUrls(e.layer._bounds, terrarium, map.getZoom());
+
+    var normalsURLS = getTileUrls(e.layer._bounds, normals, map.getZoom());
+
+    // The URLs we can feed in to my existing 3D viewer and render in the browser
+    console.log(textureURLS);
+    console.log(elevationURLS);
+    console.log(normalsURLS);
+
+});
 
         </script>
 
