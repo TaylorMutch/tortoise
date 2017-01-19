@@ -193,18 +193,7 @@
 		var loader = new THREE.TextureLoader()
 
 		// light uniform
-	    var dynamicLightPosition = Array(1.0,-1.0,1.0)
-	    function updateLightPosition() {
-	    	if (scene.children.length > 0) {
-	    		for (var i = 0; i < scene.children.length; i++) {
-		   			var child = scene.children[i]
-	    			var child_mat = child.material
-					child_mat.uniforms.light.value = dynamicLightPosition
-					child_mat.uniforms.light.needsUpdate = true
-	    		}
-	    		render()
-	    	}
-	    }
+	    var dynamicLightPosition = Array(1.0,0.0,1.0);
 
 	    function addOneTile(x_offset, y_offset, base_texture, height_texture, normal_texture, data_textures) {
 			var geometry = new THREE.PlaneBufferGeometry(tile_size, tile_size, tile_size-1, tile_size-1);
@@ -218,8 +207,8 @@
 					'b_tex': {value: base_texture},
 					'disp': {value: 3.0},
 					'light': {value: dynamicLightPosition},
-					'intactness': {value: 0.3},	// init value
-					'lblend': {value: 0.5},
+					'intactness': {value: 0.2},	// init value
+					'lblend': {value: 0.2},
 					'sdm': {value: 1.0}
 				},
 				vertexShader: document.getElementById('vertexShader').textContent,
@@ -320,39 +309,34 @@
 		var guiParams = {
 			'Vertical Scale': 3.0,
 			'Light Position (x)': 1.0,
-			'Light Position (y)': -1.0,
+			'Light Position (y)': 0.0,
 			'Light Position (z)': 1.0,
 			'Tortoise SDM': true,
 			'Low Intactness': 0.3,
-			'Layer Blending': 0.5
+			'Layer Blending': 0.2
 		}
 
 	    var advControls = terrainControls.addFolder('Advanced Controls')
 
 	    advControls.add(guiParams, 'Vertical Scale',0.0, 10.0).onChange( function(value){
-
 	    	if (scene.children.length > 0) {
 	    		for (var i = 0; i < scene.children.length; i++) {
-	    			var child = scene.children[i]
-	    			var child_mat = child.material
-					child_mat.uniforms.disp.value = value
-					child_mat.uniforms.disp.needsUpdate = true
+	    			var child = scene.children[i];
+	    			var child_mat = child.material;
+	    			child_mat.uniforms.disp.value = value;
+	    			child_mat.uniforms.disp.needsUpdate = true;
 	    		}
-	    		render()
 	    	}
 	    })
 
 	    advControls.add(guiParams, 'Light Position (x)', -1.0, 1.0).onChange(function(value) {
 	    	dynamicLightPosition[0] = value
-	    	updateLightPosition()
 	    })
 	    advControls.add(guiParams, 'Light Position (y)', -1.0, 1.0).onChange(function(value) {
 	    	dynamicLightPosition[1] = value
-	    	updateLightPosition()
 	    })
 	    advControls.add(guiParams, 'Light Position (z)', -1.0, 1.0).onChange(function(value) {
 	    	dynamicLightPosition[2] = value    	
-	    	updateLightPosition()
 	    })
 
 	    advControls.add(guiParams, 'Layer Blending', 0.0, 1.0).onChange(function(value) {
